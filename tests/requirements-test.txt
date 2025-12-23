@@ -1,0 +1,23 @@
+# Testing Dependencies for Flask Project
+
+# Core testing framework
+pytest==7.4.3
+pytest-flask==1.3.0
+
+# Code coverage
+pytest-cov==4.1.0
+
+# Parallel execution (optional but recommended)
+pytest-xdist==3.5.0
+
+# Mocking utilities (already included in Python 3.3+, but explicit version)
+pytest-mock==3.12.0
+
+# For better test output
+pytest-sugar==0.9.7
+
+# For test ordering (optional)
+pytest-ordering==0.6
+
+# For benchmark tests (optional)
+pytest-benchmark==4.0.0

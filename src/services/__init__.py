@@ -1,6 +1,9 @@
 """
-Módulo de servicios
+Centralización de services
 """
-from .perfil_service import get_datos_usuario
 
-__all__ = ['get_datos_usuario']
+from src.services.auth_service import auth_service
+
+__all__ = [
+    'auth_service'
+]

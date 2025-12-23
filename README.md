@@ -1,309 +1,223 @@
-# Flask API Base
+# Node.js API Base
 
-Proyecto base en Flask equivalente a Node.js/Express, diseñado para crear APIs RESTful empresariales con las mejores prácticas.
+API base construida con Node.js, Express, Sequelize y PostgreSQL. Incluye autenticación JWT, seguridad con Helmet, documentación Swagger y estructura modular.
 
-## 🚀 Características
+## Requisitos Previos
 
-- **Flask** como framework web (equivalente a Express)
-- **SQLAlchemy** como ORM (equivalente a Sequelize)
-- **Flask-JWT-Extended** para autenticación JWT
-- **Blueprints** para organización de rutas (equivalente a Express Router)
-- **Auto-generación de modelos** desde la base de datos
-- **Transacciones** con rollback automático
-- **Middlewares** de autenticación, rate limiting y request locking
-- **Cifrado AES-256** para datos sensibles
-- **Swagger/OpenAPI** para documentación
-- **Logging estructurado** y manejo de errores
-- **Docker** para despliegue
-- **Pool de conexiones** optimizado
+- Node.js (v14 o superior)
+- PostgreSQL
+- npm
 
-## 📋 Requisitos
+## Instalación
 
-- Python 3.9+
-- MySQL 5.7+ o PostgreSQL 12+
-- pip (gestor de paquetes de Python)
+1.  Clonar el repositorio:
 
-## ⚡ Quick Start
+    ```bash
+    git clone <url-del-repositorio>
+    cd nodejsbase
+    ```
 
-### 1. Instalación
+2.  Instalar dependencias:
+    ```bash
+    npm install
+    ```
 
-```bash
-# Clonar el repositorio
-git clone <tu-repo>
-cd flask-api-base
+## Configuración
 
-# Crear entorno virtual
-python -m venv venv
+### Variables de Entorno (.env)
 
-# Activar entorno virtual
-# En Linux/Mac:
-source venv/bin/activate
-# En Windows:
-venv\Scripts\activate
+Crea un archivo `.env` en la raíz del proyecto basándote en `.env.example`. Configura las siguientes variables:
 
-# Instalar dependencias
-pip install -r requirements.txt
+```ini
+# Server
+NODE_ENV=development      # Entorno: development, test, create-vite-appproduction
+PORT=3000                 # Puerto del servidor
+
+# API
+API_PREFIX=/api/v1       # Prefijo global para las rutas
+
+# CORS
+CORS_ORIGIN=*            # Orígenes permitidos (usar dominio específico en producción)
+
+# Database
+DB_HOST=localhost        # Host de la base de datos
+DB_PORT=5432             # Puerto de PostgreSQL
+DB_NAME=tu_base_datos    # Nombre de la base de datos principal
+DB_USER=tu_usuario       # Usuario de la base de datos
+DB_PASSWORD=tu_password  # Contraseña de la base de datos
+DB_DIALECT=postgres      # Dialecto (postgres)
+DB_SCHEMA=public         # Esquema de la base de datos
+
+# JWT
+JWT_SECRET=tu_secret_super_seguro_cambialo_en_produccion # Clave secreta para firmar tokens
+JWT_EXPIRES_IN=24h       # Tiempo de expiración del token
+
+# Crypto
+ENCRYPTION_KEY=tu_clave_super_segura_cambiala_en_produccion # Clave para encriptación de datos sensibles
+
+# Rate Limiting
+RATE_LIMIT_WINDOW_MS=900000 # Ventana de tiempo en ms (15 minutos)
+RATE_LIMIT_MAX_REQUESTS=100 # Máximo de peticiones por ventana por IP
+
+# Logs
+LOG_LEVEL=debug          # Nivel de log (debug, info, error)
 ```
 
-### 2. Configuración
+### Entorno de Pruebas (.env.test)
 
-```bash
-# Copiar archivo de ejemplo
-cp .env.example .env
+Para ejecutar los tests, necesitas configurar un archivo `.env.test`. Este archivo se carga automáticamente cuando `NODE_ENV=test`.
 
-# Editar .env con tus credenciales
-nano .env
-```
+```ini
+# Server
+NODE_ENV=test
+PORT=3000
 
-Variables de entorno importantes:
-```env
+# API
+API_PREFIX=/api/v1
+
+# Base de datos de pruebas (IMPORTANTE: Usar una base de datos distinta a la de desarrollo)
 DB_HOST=localhost
-DB_USER=root
+DB_PORT=5432
+DB_NAME=postgres         # Puede ser la misma instancia
+DB_USER=postgres
 DB_PASSWORD=tu_password
-DB_NAME=tu_database
-DB_PORT=3306
-DB_DIALECT=mysql  # o postgresql
+DB_DIALECT=postgres
+DB_SCHEMA=test_schema    # Usar un esquema separado para tests es recomendado
 
-SECRET_KEY=tu-clave-secreta
-JWT_SECRET_KEY=tu-jwt-secret
-AES_KEY=tu-aes-key-32-bytes-hex
-AES_IV=tu-aes-iv-16-bytes-hex
+# Claves para tests
+JWT_SECRET=clave_secreta_para_tests
+JWT_EXPIRES_IN=24h
+ENCRYPTION_KEY=clave_encriptacion_para_tests
 ```
 
-### 3. Generar Modelos
+> [!WARNING]
+> Asegúrate de que las credenciales de la base de datos de pruebas sean correctas y tengas permisos para crear/borrar esquemas o tablas.
+
+## Base de Datos
+
+Comandos disponibles para gestionar la base de datos con Sequelize:
+
+- **Migrar base de datos:**
+
+  ```bash
+  npm run db:migrate
+  ```
+
+- **Deshacer última migración:**
+
+  ```bash
+  npm run db:migrate:undo
+  ```
+
+- **Poblar base de datos (Seeds):**
+
+  ```bash
+  npm run db:seed
+  ```
+
+- **Resetear base de datos (Undo all + Migrate + Seed):**
+  ```bash
+  npm run db:reset
+  ```
+
+## Ejecución
+
+### Desarrollo
+
+Arranca el servidor con `nodemon` para reinicio automático ante cambios.
 
 ```bash
-# Generar modelos automáticamente desde tu base de datos
-python generar_modelos.py
+npm run dev
 ```
 
-Esto creará el archivo `src/models/generated_models.py` con todos tus modelos.
+### Producción
 
-### 4. Ejecutar
+Arranca el servidor con `node`.
 
 ```bash
-# Modo desarrollo
-python index.py
-
-# O con flask run
-export FLASK_APP=index.py
-flask run
+npm start
 ```
 
-El servidor estará corriendo en `http://localhost:5000`
+## Testing
 
-## 📁 Estructura del Proyecto
-
-```
-flask-api-base/
-├── index.py                    # Punto de entrada (equivalente a index.js)
-├── requirements.txt            # Dependencias (equivalente a package.json)
-├── .env.example               # Plantilla de variables de entorno
-├── Dockerfile                 # Configuración Docker
-├── generar_modelos.py         # Script para generar modelos (equivalente a generar-modelos.js)
-│
-└── src/
-    ├── app.py                 # Configuración de Flask (equivalente a app.js)
-    │
-    ├── config/                # Configuraciones
-    │   ├── database.py        # Config de BD (equivalente a database.js)
-    │   ├── swagger.py         # Config de Swagger
-    │   └── logging_config.py  # Config de logging
-    │
-    ├── database/              # Capa de base de datos
-    │   └── connection.py      # Conexión SQLAlchemy (equivalente a connection.js)
-    │
-    ├── models/                # Modelos de base de datos
-    │   └── generated_models.py # Modelos autogenerados
-    │
-    ├── routes/                # Rutas (Blueprints)
-    │   ├── __init__.py        # Registro de rutas (equivalente a routes/index.js)
-    │   └── perfil_routes.py   # Ejemplo de rutas
-    │
-    ├── controllers/           # Controladores
-    │   └── perfil_controller.py
-    │
-    ├── services/              # Lógica de negocio
-    │   └── perfil_service.py
-    │
-    ├── middlewares/           # Middlewares
-    │   ├── auth_middleware.py      # Autenticación (equivalente a authMiddleware.js)
-    │   ├── request_lock_middleware.py # Request locking
-    │   └── rate_limit.py           # Rate limiting
-    │
-    └── utils/                 # Utilidades
-        ├── crypto_utils.py    # Cifrado (equivalente a cryptoUtils.js)
-        ├── database_utils.py  # Transacciones (equivalente a databaseUtils.js)
-        ├── datos_utils.py     # Datos de usuario
-        └── request_lock.py    # Sistema de locks
-```
-
-## 🔑 Características Principales
-
-### 1. Transacciones Automáticas
-
-```python
-from src.utils.database_utils import execute_with_transaction
-
-def crear_usuario(data):
-    return execute_with_transaction(
-        data,
-        lambda params: Usuario.crear(params),
-        'CREAR_USUARIO'
-    )
-```
-
-### 2. Consultas con Logging
-
-```python
-from src.utils.database_utils import execute_query
-
-def obtener_usuario(user_id):
-    return execute_query(
-        {'user_id': user_id},
-        lambda params: Usuario.query.get(params['user_id']),
-        'OBTENER_USUARIO'
-    )
-```
-
-### 3. Middlewares de Autenticación
-
-```python
-from src.middlewares import verificar_autenticacion, verificar_timestamp
-
-@app.route('/perfil')
-@verificar_timestamp
-@verificar_autenticacion
-def get_perfil():
-    return jsonify(usuario=request.usuario)
-```
-
-### 4. Request Locking
-
-```python
-from src.middlewares import with_request_lock
-
-@app.route('/operacion')
-@verificar_autenticacion
-@with_request_lock(lambda: request.usuario.get('id_usuario'))
-def operacion_critica():
-    # Solo una request por usuario a la vez
-    return jsonify(status='ok')
-```
-
-### 5. Cifrado AES-256
-
-```python
-from src.utils.crypto_utils import encriptar_mensaje, desencriptar_mensaje
-
-# Encriptar
-encrypted = encriptar_mensaje("datos sensibles")
-
-# Desencriptar
-decrypted = desencriptar_mensaje(encrypted)
-```
-
-## 🔒 Seguridad
-
-- **JWT** con cookies HttpOnly
-- **Cifrado AES-256-CBC** para datos sensibles
-- **Rate limiting** configurable
-- **CORS** configurable por entorno
-- **Helmet-like headers** con Flask-Talisman (opcional)
-- **Validación de timestamp** para prevenir replay attacks
-- **Request locking** para prevenir operaciones duplicadas
-
-## 📚 Documentación API
-
-Con el servidor corriendo en modo desarrollo:
-- Swagger UI: http://localhost:5000/api-docs/
-
-## 🐳 Docker
+Ejecutar la suite de pruebas con Jest. Asegúrate de tener configurado el archivo `.env.test`.
 
 ```bash
-# Construir imagen
-docker build -t flask-api-base .
-
-# Ejecutar contenedor
-docker run -p 5000:5000 --env-file .env flask-api-base
+npm test
 ```
 
-## 🧪 Testing
+Para ejecutar tests en modo watch (re-ejecución automática):
 
 ```bash
-# Instalar dependencias de testing
-pip install pytest pytest-flask
-
-# Ejecutar tests
-pytest
+npm run test:watch
 ```
 
-## 📝 Comparación Node.js vs Flask
+## Documentación API
 
-| Node.js/Express | Flask |
-|----------------|-------|
-| `express.Router()` | `Blueprint()` |
-| `app.use(middleware)` | `@decorator` |
-| `async/await` | `async def` (opcional) |
-| `try/catch` | `try/except` |
-| `require()` | `import` |
-| `module.exports` | `__all__` |
-| Sequelize | SQLAlchemy |
-| `npm install` | `pip install` |
-| `package.json` | `requirements.txt` |
-| `node index.js` | `python index.py` |
+La API se sirve bajo el prefijo configurado (por defecto `/api/v1`).
 
-## 🚀 Despliegue
+### Swagger
 
-### Con Gunicorn (Producción)
+La documentación interactiva generado con Swagger está disponible en:
+`http://localhost:3000/api/v1/docs`
 
-```bash
-# Instalar gunicorn
-pip install gunicorn
+### Endpoints Principales
 
-# Ejecutar
-gunicorn -w 4 -b 0.0.0.0:5000 "src.app:create_app()"
+#### General
+
+- `GET /`: Mensaje de bienvenida y lista de endpoints principales.
+- `GET /api/v1/health`: Estado del servicio (Health check).
+
+#### Autenticación (Auth)
+
+- `POST /api/v1/auth/register`: Registrar nuevo usuario.
+- `POST /api/v1/auth/login`: Iniciar sesión (retorna JWT).
+- `GET /api/v1/auth/profile`: Obtener perfil del usuario autenticado.
+- `PUT /api/v1/auth/profile`: Actualizar perfil.
+- `PUT /api/v1/auth/change-password`: Cambiar contraseña.
+- `DELETE /api/v1/auth/account`: Desactivar cuenta.
+
+#### Usuarios (Users) - Requiere Rol Admin
+
+- `GET /api/v1/users`: Listar usuarios (paginado).
+- `GET /api/v1/users/stats`: Estadísticas de usuarios.
+- `GET /api/v1/users/:id`: Obtener usuario por ID.
+- `PUT /api/v1/users/:id/role`: Cambiar rol de usuario.
+- `PUT /api/v1/users/:id/activate`: Activar usuario.
+- `PUT /api/v1/users/:id/deactivate`: Desactivar usuario.
+- `DELETE /api/v1/users/:id`: Eliminar usuario permanentemente.
+
+#### Productos (Products)
+
+**Público:**
+
+- `GET /api/v1/products`: Listar productos.
+- `GET /api/v1/products/:id`: Ver detalle de producto.
+- `GET /api/v1/products/category/:category`: Productos por categoría.
+
+**Admin:**
+
+- `GET /api/v1/products/stats`: Estadísticas de productos.
+- `POST /api/v1/products`: Crear producto.
+- `PUT /api/v1/products/:id`: Actualizar producto.
+- `PATCH /api/v1/products/:id/stock`: Actualizar stock.
+- `DELETE /api/v1/products/:id`: Eliminar producto (soft delete).
+- `DELETE /api/v1/products/:id/permanent`: Eliminar producto permanentemente.
+
+## Estructura del Proyecto
+
 ```
-
-### Variables de Entorno Importantes
-
-```env
-FLASK_ENV=production
-PORT=5000
-DB_HOST=tu-servidor-bd
-SECRET_KEY=clave-super-secreta
+nodejsBase/
+├─ config/         # Configuraciones (DB, Swagger)
+├─ migrations/         # Migraciones de la base de datos
+├─ seeds/         # Semillas de la base de datos
+├─ tests/         # Pruebas unitarias y de integración
+├─ src/
+   ├── controllers/    # Lógica de los endpoints (Handlers)
+   ├── middlewares/    # Middlewares (Auth, Error Handler, Validator)
+   ├── models/         # Modelos Sequelize
+   ├── routes/         # Definición de rutas
+   ├── services/       # Lógica de negocio
+   ├── utils/          # Utilidades y Helpers
+   └── validators/     # Validaciones con express-validator
 ```
-
-## 📖 Migración desde Node.js
-
-Si vienes de Node.js/Express, aquí están las equivalencias principales:
-
-1. **Express Router → Flask Blueprint**
-2. **Middleware functions → Decorators**
-3. **Sequelize → SQLAlchemy**
-4. **package.json → requirements.txt**
-5. **Callbacks → Return values**
-
-## 🤝 Contribuir
-
-1. Fork el proyecto
-2. Crea una rama (`git checkout -b feature/AmazingFeature`)
-3. Commit cambios (`git commit -m 'Add AmazingFeature'`)
-4. Push a la rama (`git push origin feature/AmazingFeature`)
-5. Abre un Pull Request
-
-## 📄 Licencia
-
-Este proyecto está bajo la Licencia MIT.
-
-## 💡 Notas Importantes
-
-- **Revisa los modelos generados** y ajusta según sea necesario
-- **Configura las variables de entorno** correctamente
-- **No uses sync/alter en producción** (igual que en Sequelize)
-- **Implementa migraciones** con Alembic para cambios de esquema
-- **Revisa la lógica de datos_utils.py** y actualízala con tus modelos reales
-
-## 🆘 Soporte
-
-Si encuentras algún problema o tienes preguntas, abre un issue en el repositorio.

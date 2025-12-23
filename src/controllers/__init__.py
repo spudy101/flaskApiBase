@@ -1,6 +1,9 @@
 """
-Módulo de controladores
+Centralización de controllers
 """
-from .perfil_controller import get_datos_usuario_handler
 
-__all__ = ['get_datos_usuario_handler']
+from src.controllers.auth_controller import AuthController
+
+__all__ = [
+    'AuthController'
+]
