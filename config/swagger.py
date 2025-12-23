@@ -1,11 +1,12 @@
 """
 Configuración de Swagger/OpenAPI
-Equivalente a swagger.js
 """
 
 from flask_swagger_ui import get_swaggerui_blueprint
 from flask import jsonify
 import os
+from .swagger_schemas.init import get_all_schemas
+from .swagger_paths.init import get_all_paths
 
 
 def setup_swagger(app):
@@ -53,96 +54,15 @@ def setup_swagger(app):
                     'description': 'Ingresa tu token JWT en el formato: Bearer {token}'
                 }
             },
-            'schemas': {
-                'SuccessResponse': {
-                    'type': 'object',
-                    'properties': {
-                        'success': {'type': 'boolean', 'example': True},
-                        'message': {'type': 'string', 'example': 'Operación exitosa'},
-                        'data': {'type': 'object'},
-                        'timestamp': {'type': 'string', 'format': 'date-time', 'example': '2025-12-18T20:00:00.000Z'}
-                    }
-                },
-                'ErrorResponse': {
-                    'type': 'object',
-                    'properties': {
-                        'success': {'type': 'boolean', 'example': False},
-                        'message': {'type': 'string', 'example': 'Error en la operación'},
-                        'timestamp': {'type': 'string', 'format': 'date-time'}
-                    }
-                },
-                'ValidationErrorResponse': {
-                    'type': 'object',
-                    'properties': {
-                        'success': {'type': 'boolean', 'example': False},
-                        'message': {'type': 'string', 'example': 'Errores de validación'},
-                        'errors': {
-                            'type': 'array',
-                            'items': {
-                                'type': 'object',
-                                'properties': {
-                                    'field': {'type': 'string', 'example': 'email'},
-                                    'message': {'type': 'string', 'example': 'El email es requerido'}
-                                }
-                            }
-                        },
-                        'timestamp': {'type': 'string', 'format': 'date-time'}
-                    }
-                },
-                'PaginatedResponse': {
-                    'type': 'object',
-                    'properties': {
-                        'success': {'type': 'boolean', 'example': True},
-                        'message': {'type': 'string'},
-                        'data': {'type': 'array', 'items': {'type': 'object'}},
-                        'pagination': {
-                            'type': 'object',
-                            'properties': {
-                                'page': {'type': 'integer', 'example': 1},
-                                'limit': {'type': 'integer', 'example': 10},
-                                'total': {'type': 'integer', 'example': 100},
-                                'totalPages': {'type': 'integer', 'example': 10},
-                                'hasNextPage': {'type': 'boolean', 'example': True},
-                                'hasPrevPage': {'type': 'boolean', 'example': False}
-                            }
-                        },
-                        'timestamp': {'type': 'string', 'format': 'date-time'}
-                    }
-                },
-                'User': {
-                    'type': 'object',
-                    'properties': {
-                        'id': {'type': 'string', 'format': 'uuid'},
-                        'email': {'type': 'string', 'format': 'email', 'example': 'usuario@example.com'},
-                        'name': {'type': 'string', 'example': 'Juan Pérez'},
-                        'role': {'type': 'string', 'enum': ['user', 'admin'], 'example': 'user'},
-                        'isActive': {'type': 'boolean', 'example': True},
-                        'lastLogin': {'type': 'string', 'format': 'date-time', 'nullable': True},
-                        'createdAt': {'type': 'string', 'format': 'date-time'},
-                        'updatedAt': {'type': 'string', 'format': 'date-time'}
-                    }
-                },
-                'Product': {
-                    'type': 'object',
-                    'properties': {
-                        'id': {'type': 'string', 'format': 'uuid'},
-                        'name': {'type': 'string', 'example': 'Laptop HP'},
-                        'description': {'type': 'string', 'example': 'Laptop HP Pavilion 15.6"'},
-                        'price': {'type': 'number', 'format': 'decimal', 'example': 799.99},
-                        'stock': {'type': 'integer', 'example': 15},
-                        'category': {'type': 'string', 'example': 'Electronics'},
-                        'isActive': {'type': 'boolean', 'example': True},
-                        'createdBy': {'type': 'string', 'format': 'uuid'},
-                        'createdAt': {'type': 'string', 'format': 'date-time'},
-                        'updatedAt': {'type': 'string', 'format': 'date-time'}
-                    }
-                }
-            }
+            'schemas': get_all_schemas()  # ✨ Todos los schemas modularizados
         },
+        'paths': get_all_paths(),  # ✨ Todos los paths modularizados
         'tags': [
             {'name': 'Auth', 'description': 'Endpoints de autenticación y gestión de perfil'},
             {'name': 'Users', 'description': 'Gestión de usuarios (Solo Admin)'},
-            {'name': 'Products', 'description': 'Gestión de productos (CRUD completo)'}
+            {'name': 'Products', 'description': 'Gestión de productos (CRUD completo)'},
+            {'name': 'Orders', 'description': 'Gestión de órdenes'},
+            {'name': 'Payments', 'description': 'Gestión de pagos'}
         ]
     }
     
