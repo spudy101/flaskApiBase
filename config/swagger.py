@@ -2,7 +2,7 @@
 Configuración de Swagger/OpenAPI
 Equivalente a swagger.js
 """
-
+from .swagger_paths.auth import auth_paths
 from flask_swagger_ui import get_swaggerui_blueprint
 from flask import jsonify
 import os
@@ -17,7 +17,10 @@ def setup_swagger(app):
     """
     API_PREFIX = os.getenv('API_PREFIX', '/api/v1')
     PORT = os.getenv('PORT', '5000')
-    
+
+    all_paths = {}
+    all_paths.update(auth_paths)
+
     # Especificación OpenAPI
     swagger_spec = {
         'openapi': '3.0.0',
