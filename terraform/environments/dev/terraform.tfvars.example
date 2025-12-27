@@ -1,0 +1,51 @@
+# ============================================================================
+# Configuración para entorno DEVELOPMENT - EJEMPLO
+# ============================================================================
+# Copia este archivo a terraform.tfvars y completa los valores sensibles
+# ============================================================================
+
+# General
+aws_region   = "us-east-1"
+project_name = "nodejs-api"
+environment  = "dev"
+
+# VPC
+vpc_cidr           = "10.0.0.0/16"
+availability_zones = ["us-east-1a", "us-east-1b"]
+
+# Database - Configuración mínima para dev
+db_name              = "nodejsdb_dev"
+db_username          = "dbadmin"
+db_port              = 5432
+db_schema            = "public"
+db_instance_class    = "db.t3.micro"
+db_allocated_storage = 20
+db_multi_az          = false
+db_backup_retention  = 1     # Solo 1 día en dev
+skip_final_snapshot  = true  # No crear snapshot final en dev
+
+# App Runner - Configuración económica
+app_runner_cpu             = 1024  # 1 vCPU
+app_runner_memory          = 2048  # 2 GB
+app_runner_port            = 3000
+app_runner_min_size        = 1
+app_runner_max_size        = 3
+app_runner_max_concurrency = 80
+
+# GitHub
+github_repo_url = "https://github.com/TU-USUARIO/TU-REPO"  # CAMBIAR
+github_branch   = "main"
+
+# Cognito
+cognito_web_callback_urls    = ["http://localhost:3000/callback", "https://dev.tu-dominio.com/callback"]
+cognito_web_logout_urls      = ["http://localhost:3000", "https://dev.tu-dominio.com"]
+cognito_enable_mobile_client = false
+cognito_enable_identity_pool = false
+
+# Secrets - COMPLETAR CON TUS VALORES
+# NUNCA commitear estos valores al repositorio
+jwt_secret              = "GENERAR_CON: openssl rand -hex 64"  # CAMBIAR
+github_token_secret_arn = "arn:aws:secretsmanager:REGION:ACCOUNT:secret:NAME"  # CAMBIAR
+
+# ALB - No usado en dev
+certificate_arn = ""

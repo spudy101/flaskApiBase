@@ -1,0 +1,53 @@
+# ============================================================================
+# Configuración para entorno PRODUCTION - EJEMPLO
+# ============================================================================
+# Copia este archivo a terraform.tfvars y completa los valores sensibles
+# IMPORTANTE: Revisar todos los valores antes de aplicar en producción
+# ============================================================================
+
+# General
+aws_region   = "us-east-1"
+project_name = "nodejs-api"
+environment  = "prod"
+
+# VPC (CIDR diferente a dev y staging)
+vpc_cidr           = "10.1.0.0/16"
+availability_zones = ["us-east-1a", "us-east-1b"]
+
+# Database (configuración robusta para producción)
+db_name              = "nodejsapidb"
+db_username          = "postgres"
+db_port              = 5432
+db_schema            = "app_schema"
+db_instance_class    = "db.t4g.small"
+db_allocated_storage = 50
+db_multi_az          = true   # Alta disponibilidad
+db_backup_retention  = 30     # 30 días de backups
+skip_final_snapshot  = false  # CREAR snapshot al destruir (seguridad)
+
+# App Runner (configuración robusta para producción)
+app_runner_cpu             = 2048  # 2 vCPU
+app_runner_memory          = 4096  # 4 GB
+app_runner_port            = 3000
+app_runner_min_size        = 2     # Mínimo 2 instancias
+app_runner_max_size        = 10    # Hasta 10 instancias
+app_runner_max_concurrency = 100
+
+# GitHub
+github_repo_url = "https://github.com/TU-USUARIO/TU-REPO"  # CAMBIAR
+github_branch   = "main"
+
+# Cognito
+cognito_web_callback_urls    = ["https://app.tu-dominio.com/callback"]
+cognito_web_logout_urls      = ["https://app.tu-dominio.com"]
+cognito_enable_mobile_client = false
+cognito_enable_identity_pool = false
+
+# Secrets - COMPLETAR CON TUS VALORES
+# CRÍTICO: Usar valores únicos y seguros para producción
+jwt_secret              = "GENERAR_CON: openssl rand -hex 64"  # CAMBIAR
+github_token_secret_arn = "arn:aws:secretsmanager:REGION:ACCOUNT:secret:NAME"  # CAMBIAR
+
+# ALB (se crea automáticamente en prod)
+# IMPORTANTE: Agregar certificate_arn cuando tengas un certificado SSL en ACM
+certificate_arn = ""  # REQUERIDO para HTTPS: ARN del certificado ACM
