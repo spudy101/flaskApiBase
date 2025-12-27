@@ -1,0 +1,51 @@
+# ============================================================================
+# Configuración para entorno STAGING - EJEMPLO
+# ============================================================================
+# Copia este archivo a terraform.tfvars y completa los valores sensibles
+# ============================================================================
+
+# General
+aws_region   = "us-east-1"
+project_name = "nodejs-api"
+environment  = "staging"
+
+# VPC (CIDR diferente a dev y prod)
+vpc_cidr           = "10.2.0.0/16"
+availability_zones = ["us-east-1a", "us-east-1b"]
+
+# Database (misma config que prod para pruebas realistas)
+db_name              = "nodejsapidb"
+db_username          = "postgres"
+db_port              = 5432
+db_schema            = "app_schema"
+db_instance_class    = "db.t4g.small"  # Igual que prod
+db_allocated_storage = 50
+db_multi_az          = true            # Igual que prod
+db_backup_retention  = 7               # Menos días que prod
+skip_final_snapshot  = true            # OK destruir sin snapshot (es staging)
+
+# App Runner (misma config que prod)
+app_runner_cpu             = 2048  # 2 vCPU
+app_runner_memory          = 4096  # 4 GB
+app_runner_port            = 3000
+app_runner_min_size        = 2
+app_runner_max_size        = 10
+app_runner_max_concurrency = 100
+
+# GitHub
+github_repo_url = "https://github.com/TU-USUARIO/TU-REPO"  # CAMBIAR
+github_branch   = "main"
+
+# Cognito
+cognito_web_callback_urls    = ["https://staging.tu-dominio.com/callback"]
+cognito_web_logout_urls      = ["https://staging.tu-dominio.com"]
+cognito_enable_mobile_client = false
+cognito_enable_identity_pool = false
+
+# Secrets - COMPLETAR CON TUS VALORES
+jwt_secret              = "GENERAR_CON: openssl rand -hex 64"  # CAMBIAR
+github_token_secret_arn = "arn:aws:secretsmanager:REGION:ACCOUNT:secret:NAME"  # CAMBIAR
+
+# ALB (se crea automáticamente en staging)
+# Agregar certificate_arn cuando tengas un certificado SSL
+certificate_arn = ""  # OPCIONAL: ARN del certificado ACM
