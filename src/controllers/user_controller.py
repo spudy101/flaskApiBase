@@ -1,185 +1,125 @@
 """
-Controller de usuarios
-Equivalente a userController.js
+User Controller
+Equivalente a src/controllers/user.controller.js
 """
-
-from src.services import user_service, auth_service
-from src.utils import success_response, error_response, paginated_response, logger
+from flask import request, g
+from src.repositories.user_repository import user_repository
+from src.dto.user_dto import UpdateUserDTO
+from src.dto.auth_dto import UserResponseDTO
+from src.utils.response_util import ApiResponse
+from src.utils.app_error import AppError
 
 
 class UserController:
-    """Controller de usuarios"""
+    """User controller"""
     
-    def list_users(self, req):
+    def get_all(self):
         """
-        Listar todos los usuarios (Admin)
-        GET /api/v1/users
+        GET /api/users
+        Obtiene todos los usuarios (requiere auth)
         """
         try:
-            filters = {
-                'page': req.args.get('page'),
-                'limit': req.args.get('limit'),
-                'role': req.args.get('role'),
-                'isActive': req.args.get('isActive'),
-                'search': req.args.get('search')
+            # Parámetros de paginación
+            page = int(request.args.get('page', 1))
+            limit = int(request.args.get('limit', 10))
+            
+            # Obtener usuarios
+            result = user_repository.find_with_pagination(page=page, limit=limit)
+            
+            # Convertir a DTOs
+            users_dto = [UserResponseDTO.from_model(user).to_dict() for user in result['rows']]
+            
+            response_data = {
+                'users': users_dto,
+                'pagination': {
+                    'page': result['page'],
+                    'limit': result['limit'],
+                    'total': result['count'],
+                    'total_pages': result['total_pages']
+                }
             }
             
-            result = user_service.list_users(filters)
+            return ApiResponse.success('Usuarios obtenidos', response_data)
             
-            if not result['success']:
-                return error_response(result['message'], 400)
-            
-            return paginated_response(
-                result['data']['users'],
-                result['data']['pagination']['page'],
-                result['data']['pagination']['limit'],
-                result['data']['pagination']['total'],
-                'Usuarios obtenidos exitosamente'
-            )
-            
-        except Exception as error:
-            logger.error(f'Error en listUsers controller: {str(error)}')
-            return error_response(str(error), 500)
+        except Exception as e:
+            return ApiResponse.internal_error(str(e))
     
-    
-    def get_user_by_id(self, req, user_id):
+    def get_by_id(self, user_id: str):
         """
-        Obtener usuario por ID (Admin)
-        GET /api/v1/users/:id
+        GET /api/users/:id
+        Obtiene un usuario por ID
         """
         try:
-            result = user_service.get_user_by_id(user_id)
+            user = user_repository.find_by_id(user_id)
             
-            if not result['success']:
-                return error_response(result['message'], 404)
+            if not user:
+                return ApiResponse.not_found('Usuario no encontrado')
             
-            return success_response(
-                result['data'],
-                'Usuario obtenido exitosamente',
-                200
-            )
+            user_dto = UserResponseDTO.from_model(user).to_dict()
             
-        except Exception as error:
-            logger.error(f'Error en getUserById controller: {str(error)}')
+            return ApiResponse.success('Usuario obtenido', user_dto)
             
-            if str(error) == 'Usuario no encontrado':
-                return error_response(str(error), 404)
-            
-            return error_response(str(error), 500)
+        except Exception as e:
+            return ApiResponse.internal_error(str(e))
     
-    
-    def update_user_role(self, req, user_id):
+    def update(self, user_id: str):
         """
-        Actualizar rol de usuario (Admin)
-        PUT /api/v1/users/:id/role
+        PUT /api/users/:id
+        Actualiza un usuario
         """
         try:
-            data = req.get_json()
-            role = data.get('role')
+            # Verificar permisos: solo el mismo usuario o admin
+            current_user = g.user
+            if current_user['id'] != user_id and current_user['role'] != 'admin':
+                return ApiResponse.forbidden('No tienes permisos para actualizar este usuario')
             
-            result = user_service.update_user_role(user_id, role)
+            # Obtener datos
+            data = request.get_json()
+            dto = UpdateUserDTO.from_request(data)
             
-            if not result['success']:
-                return error_response(result['message'], 400)
+            # Si hay password, hashearlo
+            update_data = dto.to_dict()
+            if 'password' in update_data and update_data['password']:
+                # El model se encargará del hash
+                pass
             
-            return success_response(
-                result['data'],
-                'Rol actualizado exitosamente',
-                200
-            )
+            # Actualizar
+            updated_user = user_repository.update(user_id, update_data)
             
-        except Exception as error:
-            logger.error(f'Error en updateUserRole controller: {str(error)}')
-            return error_response(str(error), 500)
+            if not updated_user:
+                return ApiResponse.not_found('Usuario no encontrado')
+            
+            user_dto = UserResponseDTO.from_model(updated_user).to_dict()
+            
+            return ApiResponse.success('Usuario actualizado', user_dto)
+            
+        except AppError as e:
+            return ApiResponse.error(e.message, e.code, e.details, e.status_code)
+        except Exception as e:
+            return ApiResponse.internal_error(str(e))
     
-    
-    def activate_user(self, req, user_id):
+    def delete(self, user_id: str):
         """
-        Activar usuario (Admin)
-        PUT /api/v1/users/:id/activate
-        """
-        try:
-            result = auth_service.activate_user(user_id)
-            
-            if not result['success']:
-                return error_response(result['message'], 400)
-            
-            return success_response(
-                result['data'],
-                'Usuario activado exitosamente',
-                200
-            )
-            
-        except Exception as error:
-            logger.error(f'Error en activateUser controller: {str(error)}')
-            return error_response(str(error), 500)
-    
-    
-    def deactivate_user(self, req, user_id):
-        """
-        Desactivar usuario (Admin)
-        PUT /api/v1/users/:id/deactivate
+        DELETE /api/users/:id
+        Elimina (desactiva) un usuario
         """
         try:
-            result = auth_service.deactivate_user(user_id)
+            # Solo admin puede eliminar
+            current_user = g.user
+            if current_user['role'] != 'admin':
+                return ApiResponse.forbidden('Solo administradores pueden eliminar usuarios')
             
-            if not result['success']:
-                return error_response(result['message'], 400)
+            # Soft delete
+            success = user_repository.deactivate(user_id)
             
-            return success_response(
-                result['data'],
-                'Usuario desactivado exitosamente',
-                200
-            )
+            if not success:
+                return ApiResponse.not_found('Usuario no encontrado')
             
-        except Exception as error:
-            logger.error(f'Error en deactivateUser controller: {str(error)}')
-            return error_response(str(error), 500)
-    
-    
-    def delete_user(self, req, user_id):
-        """
-        Eliminar usuario permanentemente (Admin)
-        DELETE /api/v1/users/:id
-        """
-        try:
-            result = user_service.delete_user(user_id)
+            return ApiResponse.success('Usuario eliminado')
             
-            if not result['success']:
-                return error_response(result['message'], 400)
-            
-            return success_response(
-                result['data'],
-                'Usuario eliminado permanentemente',
-                200
-            )
-            
-        except Exception as error:
-            logger.error(f'Error en deleteUser controller: {str(error)}')
-            return error_response(str(error), 500)
-    
-    
-    def get_user_stats(self, req):
-        """
-        Obtener estadísticas de usuarios (Admin)
-        GET /api/v1/users/stats
-        """
-        try:
-            result = user_service.get_user_stats()
-            
-            if not result['success']:
-                return error_response(result['message'], 400)
-            
-            return success_response(
-                result['data'],
-                'Estadísticas obtenidas exitosamente',
-                200
-            )
-            
-        except Exception as error:
-            logger.error(f'Error en getUserStats controller: {str(error)}')
-            return error_response(str(error), 500)
+        except Exception as e:
+            return ApiResponse.internal_error(str(e))
 
 
-# Exportar instancia única
+# Singleton instance
 user_controller = UserController()

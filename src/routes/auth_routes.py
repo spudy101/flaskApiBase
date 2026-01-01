@@ -1,82 +1,52 @@
 """
-Rutas de autenticación
-Equivalente a authRoutes.js
+Auth Routes - Flask Blueprint
+Equivalente a src/routes/auth.routes.js
 """
-
-from flask import Blueprint, request
-from src.controllers import AuthController
-from src.middlewares import authenticate, validate_request
-from src.validators import (
-    validate_register,
-    validate_login,
-    validate_update_profile,
-    validate_change_password
-)
+from flask import Blueprint
+from src.controllers.auth_controller import auth_controller
+from src.middlewares.auth_middleware import authenticate
+from src.validators.auth_validator import validate_register, validate_login, validate_refresh_token
 
 # Crear blueprint
-auth_bp = Blueprint('auth', __name__)
-
-# Instanciar controller
-auth_controller = AuthController()
+auth_bp = Blueprint('auth', __name__, url_prefix='/api/auth')
 
 
 @auth_bp.route('/register', methods=['POST'])
-@validate_request(validate_register)
+@validate_register()
 def register():
-    """
-    Registrar nuevo usuario
-    POST /api/v1/auth/register
-    """
-    return auth_controller.register(request)
+    """POST /api/auth/register - Registrar usuario"""
+    return auth_controller.register()
 
 
 @auth_bp.route('/login', methods=['POST'])
-@validate_request(validate_login)
+@validate_login()
 def login():
-    """
-    Login de usuario
-    POST /api/v1/auth/login
-    """
-    return auth_controller.login(request)
+    """POST /api/auth/login - Login"""
+    return auth_controller.login()
 
 
-@auth_bp.route('/profile', methods=['GET'])
-@authenticate
-def get_profile():
-    """
-    Obtener perfil del usuario autenticado
-    GET /api/v1/auth/profile
-    """
-    return auth_controller.get_profile(request)
+@auth_bp.route('/logout', methods=['POST'])
+@authenticate()
+def logout():
+    """POST /api/auth/logout - Logout (requiere auth)"""
+    return auth_controller.logout()
 
 
-@auth_bp.route('/profile', methods=['PUT'])
-@authenticate
-@validate_request(validate_update_profile)
-def update_profile():
-    """
-    Actualizar perfil del usuario autenticado
-    PUT /api/v1/auth/profile
-    """
-    return auth_controller.update_profile(request)
+@auth_bp.route('/refresh', methods=['POST'])
+@validate_refresh_token()
+def refresh():
+    """POST /api/auth/refresh - Refresh token"""
+    return auth_controller.refresh_token()
 
 
-@auth_bp.route('/change-password', methods=['PUT'])
-@authenticate
-@validate_request(validate_change_password)
-def change_password():
-    """
-    Cambiar contraseña del usuario autenticado
-    PUT /api/v1/auth/change-password
-    """
-    return auth_controller.change_password(request)
+@auth_bp.route('/me', methods=['GET'])
+@authenticate()
+def me():
+    """GET /api/auth/me - Usuario actual (requiere auth)"""
+    return auth_controller.me()
 
 
-@auth_bp.route('/account', methods=['DELETE'])
-@authenticate
-def deactivate_account():
-    """
-    Desactivar cuenta del usuario autenticado
-    DELETE /api/v1/auth/account
-    """
-    return auth_controller.deactivate_account(request)
+@auth_bp.route('/verify', methods=['GET'])
+def verify():
+    """GET /api/auth/verify - Verificar token"""
+    return auth_controller.verify_token()

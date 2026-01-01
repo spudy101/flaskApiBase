@@ -1,155 +1,142 @@
+"""
+Auth Middleware - Authentication and Authorization
+Equivalente a src/middlewares/auth.middleware.js
+"""
 from functools import wraps
-from flask import request
-from src.utils import error_response, verify_token, logger
-from src.models.user import User
+from flask import request, g
+import jwt as pyjwt
+from src.utils.jwt_util import jwt_util
+from src.utils.response_util import ApiResponse
+from src.repositories.user_repository import user_repository
 
-def authenticate(func):
+
+def authenticate():
     """
-    Middleware para verificar JWT
-    """
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        try:
-            # Obtener token del header Authorization
-            auth_header = request.headers.get('Authorization')
-            
-            if not auth_header or not auth_header.startswith('Bearer '):
-                return error_response('Token de autenticación no proporcionado', 401)
-            
-            token = auth_header[7:]  # Remover "Bearer "
-            
-            # Verificar y decodificar token
-            decoded = verify_token(token)
-            
-            # Opcional: Verificar que el usuario existe y está activo
-            user = User.query.filter_by(id=decoded['id']).first()
-            
-            if not user:
-                return error_response('Usuario no encontrado', 401)
-            
-            if not user.is_active:
-                return error_response('Usuario inactivo', 403)
-            
-            # Agregar usuario al request
-            request.user = {
-                'id': user.id,
-                'email': user.email,
-                'role': user.role
-            }
-            
-            logger.debug('Usuario autenticado', extra={
-                'userId': user.id,
-                'email': user.email,
-                'role': user.role
-            })
-            
-            return func(*args, **kwargs)
-            
-        except Exception as error:
-            logger.warning('Error en autenticación', extra={
-                'error': str(error),
-                'ip': request.remote_addr,
-                'url': request.url
-            })
-            
-            error_message = str(error)
-            if error_message == 'Token expirado':
-                return error_response('Tu sesión ha expirado, por favor inicia sesión nuevamente', 401)
-            
-            if error_message == 'Token inválido':
-                return error_response('Token de autenticación inválido', 401)
-            
-            return error_response('Error al verificar autenticación', 401)
+    Middleware de autenticación
+    Equivalente a authenticate() en Node.js
     
-    return wrapper
-
-
-def authorize(*allowed_roles):
+    Verifica el token JWT y agrega el usuario a g.user
     """
-    Middleware para verificar roles
-    @param allowed_roles: Roles permitidos ['admin', 'user']
-    """
-    def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            if not hasattr(request, 'user'):
-                return error_response('Usuario no autenticado', 401)
-            
-            if request.user['role'] not in allowed_roles:
-                logger.warning('Acceso denegado por rol', extra={
-                    'userId': request.user['id'],
-                    'userRole': request.user['role'],
-                    'requiredRoles': list(allowed_roles),
-                    'url': request.url
-                })
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            try:
+                # Obtener token del header Authorization
+                auth_header = request.headers.get('Authorization', '')
                 
-                return error_response(
-                    'No tienes permisos para acceder a este recurso',
-                    403
-                )
-            
-            return func(*args, **kwargs)
+                if not auth_header or not auth_header.startswith('Bearer '):
+                    return ApiResponse.unauthorized('Token no proporcionado')
+                
+                # Extraer token
+                token = auth_header.replace('Bearer ', '')
+                
+                # Verificar token
+                try:
+                    payload = jwt_util.verify_access_token(token)
+                except pyjwt.ExpiredSignatureError:
+                    return ApiResponse.unauthorized('Token expirado')
+                except pyjwt.InvalidTokenError:
+                    return ApiResponse.unauthorized('Token inválido')
+                
+                # Verificar que el usuario existe y está activo
+                user = user_repository.find_by_id(payload['id'])
+                
+                if not user or not user.is_active:
+                    return ApiResponse.unauthorized('Usuario no encontrado o inactivo')
+                
+                # Agregar usuario a g (Flask's application context)
+                g.user = {
+                    'id': user.id,
+                    'email': user.email,
+                    'name': user.name,
+                    'role': user.role.value if hasattr(user.role, 'value') else user.role
+                }
+                g.token = token
+                
+                # Continuar con la request
+                return f(*args, **kwargs)
+                
+            except Exception as e:
+                return ApiResponse.internal_error(f'Error en autenticación: {str(e)}')
         
-        return wrapper
+        return decorated_function
     return decorator
 
 
-def authorize_owner_or_admin(param_name='userId'):
+def authorize(allowed_roles: list):
     """
-    Middleware para verificar que el usuario accede a sus propios recursos
-    o es admin
-    """
-    def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            resource_user_id = kwargs.get(param_name) or request.get_json(silent=True, force=True).get(param_name)
-            current_user_id = request.user['id']
-            is_admin = request.user['role'] == 'admin'
-            
-            if str(resource_user_id) != str(current_user_id) and not is_admin:
-                logger.warning('Acceso denegado - no es owner ni admin', extra={
-                    'userId': current_user_id,
-                    'resourceUserId': resource_user_id,
-                    'url': request.url
-                })
-                
-                return error_response(
-                    'No tienes permisos para acceder a este recurso',
-                    403
-                )
-            
-            return func(*args, **kwargs)
-        
-        return wrapper
-    return decorator
-
-
-def optional_auth(func):
-    """
-    Middleware opcional de autenticación
-    Si hay token, lo valida. Si no hay, continúa sin user
-    """
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        try:
-            auth_header = request.headers.get('Authorization')
-            
-            if auth_header and auth_header.startswith('Bearer '):
-                token = auth_header[7:]
-                decoded = verify_token(token)
-                
-                user = User.query.filter_by(id=decoded['id']).first()
-                
-                if user and user.is_active:
-                    request.user = {
-                        'id': user.id,
-                        'email': user.email,
-                        'role': user.role
-                    }
-        except:
-            # Si falla, simplemente continuar sin usuario
+    Middleware de autorización
+    Equivalente a authorize() en Node.js
+    
+    Verifica que el usuario tenga uno de los roles permitidos
+    Debe usarse DESPUÉS de authenticate()
+    
+    Usage:
+        @authenticate()
+        @authorize(['admin'])
+        def some_route():
             pass
+    """
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            try:
+                # El usuario ya fue agregado por authenticate()
+                user = g.get('user')
+                
+                if not user:
+                    return ApiResponse.unauthorized('No autenticado')
+                
+                # Verificar rol
+                user_role = user.get('role')
+                
+                if user_role not in allowed_roles:
+                    return ApiResponse.forbidden(
+                        f'Requiere uno de los siguientes roles: {", ".join(allowed_roles)}'
+                    )
+                
+                return f(*args, **kwargs)
+                
+            except Exception as e:
+                return ApiResponse.internal_error(f'Error en autorización: {str(e)}')
         
-        return func(*args, **kwargs)
-    
-    return wrapper
+        return decorated_function
+    return decorator
+
+
+def optional_auth():
+    """
+    Middleware de autenticación opcional
+    Agrega el usuario a g.user si el token es válido,
+    pero NO retorna error si no hay token
+    """
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            try:
+                auth_header = request.headers.get('Authorization', '')
+                
+                if auth_header and auth_header.startswith('Bearer '):
+                    token = auth_header.replace('Bearer ', '')
+                    
+                    try:
+                        payload = jwt_util.verify_access_token(token)
+                        user = user_repository.find_by_id(payload['id'])
+                        
+                        if user and user.is_active:
+                            g.user = {
+                                'id': user.id,
+                                'email': user.email,
+                                'name': user.name,
+                                'role': user.role.value if hasattr(user.role, 'value') else user.role
+                            }
+                    except:
+                        pass  # Ignorar errores, es autenticación opcional
+                
+                return f(*args, **kwargs)
+                
+            except Exception as e:
+                return ApiResponse.internal_error(f'Error: {str(e)}')
+        
+        return decorated_function
+    return decorator
