@@ -1,56 +1,25 @@
 """
-Centralización de rutas
-Equivalente a index.js de routes en Node.js
+Routes package - Register all blueprints
+Equivalente a combinar todas las routes en Express
 """
-
-from flask import Blueprint, jsonify
-from datetime import datetime
-import time
-import os
-
-# Importar blueprints de rutas específicas
 from .auth_routes import auth_bp
-
-# Crear blueprint principal (equivalente al router de Express)
-main_bp = Blueprint('main', __name__)
-
-
-# Health check endpoint
-@main_bp.route('/health', methods=['GET'])
-def health():
-    """Endpoint de health check"""
-    # Tiempo de inicio de la aplicación (simulando process.uptime())
-    # En producción, esto debería guardarse cuando inicia la app
-    return jsonify({
-        'success': True,
-        'message': 'API funcionando correctamente',
-        'timestamp': datetime.utcnow().isoformat() + 'Z',
-        'environment': os.getenv('FLASK_ENV', 'development')
-    }), 200
+from .user_routes import user_bp
+from .product_routes import product_bp
 
 
-# Función para registrar todos los blueprints en la app
-def register_routes(app):
+def register_blueprints(app):
     """
     Registra todos los blueprints en la aplicación
-    
-    Args:
-        app: Instancia de Flask
+    Equivalente a app.use() en Express
     """
-    API_PREFIX = os.getenv('API_PREFIX', '/api/v1')
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(user_bp)
+    app.register_blueprint(product_bp)
     
-    # Registrar blueprint principal (health check)
-    app.register_blueprint(main_bp, url_prefix=API_PREFIX)
-    
-    # Registrar blueprints de rutas específicas
-    app.register_blueprint(auth_bp, url_prefix=f'{API_PREFIX}/auth')
+    # Health check endpoint
+    @app.route('/health', methods=['GET'])
+    def health_check():
+        return {'status': 'ok', 'message': 'API is running'}, 200
 
 
-# Exportar blueprints para uso individual si es necesario
-__all__ = [
-    'main_bp',
-    'auth_bp',
-    'user_bp',
-    'product_bp',
-    'register_routes'
-]
+__all__ = ['register_blueprints', 'auth_bp', 'user_bp', 'product_bp']

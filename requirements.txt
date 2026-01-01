@@ -11,3 +11,6 @@ marshmallow
 flask_cors
 flask_limiter
 flask_swagger_ui
+python-json-logger
+pytest
+redis

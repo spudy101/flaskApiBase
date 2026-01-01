@@ -1,128 +1,97 @@
-import os
-from config.database import db
-from src.models.base import BaseModel
-from sqlalchemy.orm import validates
-from sqlalchemy import event
-import bcrypt
-import re
+"""
+User model - SQLAlchemy
+Equivalente a src/models/User.js
+"""
+from datetime import datetime
+from sqlalchemy import Column, String, Boolean, DateTime, Enum as SQLEnum
+from sqlalchemy.orm import relationship
+from werkzeug.security import generate_password_hash, check_password_hash
+import uuid
+import enum
 
-DB_SCHEMA = os.getenv('DB_SCHEMA')
 
-class User(BaseModel):
+class UserRole(enum.Enum):
+    """User roles enum"""
+    USER = 'user'
+    ADMIN = 'admin'
+
+
+class User:
     """
-    Modelo de Usuario
-    Equivalente a User.js de Sequelize
+    User model
+    Equivalente a Sequelize User model en Node.js
     """
+    
+    # SQLAlchemy declarative - se definirá en db.Model
     __tablename__ = 'users'
-    __table_args__ = {'schema': DB_SCHEMA}
     
-    email = db.Column(db.String(255), unique=True, nullable=False, index=True)
-    password = db.Column(db.String(255), nullable=False)
-    name = db.Column(db.String(100), nullable=False)
-    role = db.Column(
-        db.Enum('user', 'admin', name='user_roles'),
-        default='user',
-        nullable=False
-    )
-    is_active = db.Column(db.Boolean, default=True, nullable=False)
-    last_login = db.Column(db.DateTime, nullable=True)
+    def __init__(self, db_model):
+        """Initialize with db.Model base"""
+        self.Model = db_model
     
-    # Relación con productos
-    products = db.relationship('Product', back_populates='creator', lazy='dynamic')
-    
-    # Validaciones (equivalente a validate en Sequelize)
-    @validates('email')
-    def validate_email(self, key, email):
-        """Valida formato de email"""
-        if not email:
-            raise ValueError('El email es requerido')
+    @staticmethod
+    def define_model(db):
+        """Define User model with SQLAlchemy"""
         
-        email_regex = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-        if not re.match(email_regex, email):
-            raise ValueError('Debe ser un email válido')
+        class UserModel(db.Model):
+            __tablename__ = 'users'
+            
+            # Columns
+            id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+            email = Column(String(255), unique=True, nullable=False, index=True)
+            password = Column(String(255), nullable=False)
+            name = Column(String(100), nullable=False)
+            role = Column(SQLEnum(UserRole), default=UserRole.USER, nullable=False)
+            is_active = Column(Boolean, default=True, nullable=False)
+            last_login = Column(DateTime, nullable=True)
+            created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+            updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+            
+            # Relationships
+            products = relationship('Product', back_populates='creator', lazy='dynamic')
+            
+            def __init__(self, **kwargs):
+                """Constructor - hashea password automáticamente"""
+                super(UserModel, self).__init__(**kwargs)
+                if 'password' in kwargs and kwargs['password']:
+                    self.set_password(kwargs['password'])
+            
+            def set_password(self, password: str) -> None:
+                """
+                Hashea y establece la contraseña
+                Equivalente al hook beforeCreate/beforeUpdate en Sequelize
+                """
+                self.password = generate_password_hash(password, method='pbkdf2:sha256')
+            
+            def check_password(self, password: str) -> bool:
+                """
+                Verifica si la contraseña es correcta
+                Equivalente a comparePassword en Node
+                """
+                return check_password_hash(self.password, password)
+            
+            def to_dict(self, exclude_password: bool = True) -> dict:
+                """
+                Convierte el modelo a diccionario
+                Equivalente a toJSON() en Sequelize
+                """
+                data = {
+                    'id': self.id,
+                    'email': self.email,
+                    'name': self.name,
+                    'role': self.role.value if isinstance(self.role, UserRole) else self.role,
+                    'is_active': self.is_active,
+                    'last_login': self.last_login.isoformat() if self.last_login else None,
+                    'created_at': self.created_at.isoformat() if self.created_at else None,
+                    'updated_at': self.updated_at.isoformat() if self.updated_at else None
+                }
+                
+                if not exclude_password:
+                    data['password'] = self.password
+                    
+                return data
+            
+            def __repr__(self):
+                return f'<User {self.email}>'
         
-        return email.lower()
-    
-    @validates('password')
-    def validate_password(self, key, password):
-        """Valida longitud de password (antes de hashear)"""
-        if not password:
-            raise ValueError('La contraseña es requerida')
-        
-        # Solo valida longitud si NO está hasheada (no empieza con $2b$)
-        if not password.startswith('$2b$'):
-            if len(password) < 6 or len(password) > 100:
-                raise ValueError('La contraseña debe tener entre 6 y 100 caracteres')
-        
-        return password
-    
-    @validates('name')
-    def validate_name(self, key, name):
-        """Valida nombre"""
-        if not name or len(name.strip()) == 0:
-            raise ValueError('El nombre es requerido')
-        
-        if len(name) < 2 or len(name) > 100:
-            raise ValueError('El nombre debe tener entre 2 y 100 caracteres')
-        
-        return name.strip()
-    
-    @validates('role')
-    def validate_role(self, key, role):
-        """Valida rol"""
-        valid_roles = ['user', 'admin']
-        if role not in valid_roles:
-            raise ValueError(f'El rol debe ser {" o ".join(valid_roles)}')
-        
-        return role
-    
-    def set_password(self, password):
-        """
-        Hashea la contraseña
-        Equivalente a beforeCreate/beforeUpdate hooks
-        """
-        if password:
-            salt = bcrypt.gensalt()
-            self.password = bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
-    
-    def compare_password(self, candidate_password):
-        """
-        Compara contraseña (método de instancia)
-        Equivalente a User.prototype.comparePassword
-        """
-        return bcrypt.checkpw(
-            candidate_password.encode('utf-8'),
-            self.password.encode('utf-8')
-        )
-    
-    def to_dict(self, exclude=None):
-        """
-        Override para excluir password por defecto
-        Equivalente a toJSON en Sequelize
-        """
-        if exclude is None:
-            exclude = ['password']
-        elif 'password' not in exclude:
-            exclude.append('password')
-        
-        return super().to_dict(exclude=exclude)
-
-
-# Hooks para hashear password automáticamente
-# Equivalente a beforeCreate y beforeUpdate de Sequelize
-@event.listens_for(User, 'before_insert')
-def hash_password_before_insert(mapper, connection, target):
-    """Hook antes de insertar - hashea password"""
-    if target.password and not target.password.startswith('$2b$'):
-        target.set_password(target.password)
-
-
-@event.listens_for(User, 'before_update')
-def hash_password_before_update(mapper, connection, target):
-    """Hook antes de actualizar - hashea password solo si cambió"""
-    history = db.inspect(target).attrs.password.history
-    
-    if history.has_changes():
-        new_password = target.password
-        if new_password and not new_password.startswith('$2b$'):
-            target.set_password(new_password)
+        return UserModel

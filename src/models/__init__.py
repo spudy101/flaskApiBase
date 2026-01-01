@@ -1,13 +1,15 @@
+"""
+Models package
+Exporta todos los modelos y los inicializa con db
+"""
 from config.database import db
-from src.models.base import BaseModel
-from src.models.user import User
-from src.models.product import Product
-from src.models.login_attempt import LoginAttempt
+from .user import User as UserClass
+from .product import Product as ProductClass
+from .login_attempt import LoginAttempt as LoginAttemptClass
 
-__all__ = [
-    'db',
-    'BaseModel',
-    'User',
-    'Product',
-    'LoginAttempt'
-]
+# Definir modelos con db
+User = UserClass.define_model(db)
+Product = ProductClass.define_model(db)
+LoginAttempt = LoginAttemptClass.define_model(db)
+
+__all__ = ['User', 'Product', 'LoginAttempt']

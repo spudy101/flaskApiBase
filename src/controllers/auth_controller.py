@@ -1,185 +1,164 @@
 """
-Controller de autenticación
-Equivalente a authController.js
+Auth Controller - Request handlers
+Equivalente a src/controllers/auth.controller.js
 """
-
-from src.services import auth_service
-from src.utils import success_response, error_response, logger
+from flask import request, g
+from src.services.auth_service import auth_service
+from src.dto.auth_dto import RegisterDTO, LoginDTO, RefreshTokenDTO
+from src.utils.response_util import ApiResponse
+from src.utils.app_error import AppError
 
 
 class AuthController:
-    """Controller de autenticación"""
+    """
+    Auth controller
+    Equivalente a AuthController en Node.js
+    """
     
-    def register(self, req):
+    def register(self):
         """
-        Registrar nuevo usuario
-        POST /api/v1/auth/register
+        POST /api/auth/register
+        Registra un nuevo usuario
         """
         try:
-            data = req.get_json()
+            # Obtener datos del request
+            data = request.get_json()
             
-            result = auth_service.register({
-                'email': data.get('email'),
-                'password': data.get('password'),
-                'name': data.get('name'),
-                'role': data.get('role')
-            })
+            # Crear DTO
+            dto = RegisterDTO.from_request(data)
             
-            if not result['success']:
-                return error_response(result['message'], 400)
+            # Audit context
+            audit_context = {
+                'ip': request.remote_addr,
+                'user_agent': request.headers.get('User-Agent'),
+                'method': request.method,
+                'path': request.path
+            }
             
-            logger.info('Usuario registrado desde controller', extra={
-                'email': result['data']['user']['email']
-            })
+            # Ejecutar servicio
+            result = auth_service.register(dto, audit_context)
             
-            return success_response(
-                result['data'],
+            # Respuesta
+            return ApiResponse.created(
                 'Usuario registrado exitosamente',
-                201
+                result.to_dict()
             )
             
-        except Exception as error:
-            logger.error(f'Error en register controller: {str(error)}')
-            return error_response(str(error), 500)
+        except AppError as e:
+            return ApiResponse.error(e.message, e.code, e.details, e.status_code)
+        except Exception as e:
+            return ApiResponse.internal_error(str(e))
     
-    
-    def login(self, req):
+    def login(self):
         """
+        POST /api/auth/login
         Login de usuario
-        POST /api/v1/auth/login
         """
         try:
-            data = req.get_json()
+            data = request.get_json()
+            dto = LoginDTO.from_request(data)
             
-            result = auth_service.login(
-                data.get('email'),
-                data.get('password')
+            audit_context = {
+                'ip': request.remote_addr,
+                'user_agent': request.headers.get('User-Agent'),
+                'method': request.method,
+                'path': request.path
+            }
+            
+            result = auth_service.login(dto, audit_context)
+            
+            return ApiResponse.success(
+                'Login exitoso',
+                result.to_dict()
             )
             
-            if not result['success']:
-                return error_response(result['message'], 401)
-            
-            logger.info('Usuario logueado desde controller', extra={
-                'email': result['data']['user']['email']
-            })
-            
-            return success_response(
-                result['data'],
-                'Inicio de sesión exitoso',
-                200
-            )
-            
-        except Exception as error:
-            logger.error(f'Error en login controller: {str(error)}')
-            
-            # Errores específicos de login
-            error_message = str(error)
-            if error_message in ['Credenciales inválidas', 'Usuario inactivo'] or 'bloqueada' in error_message:
-                return error_response(error_message, 401)
-            
-            return error_response(str(error), 500)
+        except AppError as e:
+            return ApiResponse.error(e.message, e.code, e.details, e.status_code)
+        except Exception as e:
+            return ApiResponse.internal_error(str(e))
     
-    
-    def get_profile(self, req):
+    def logout(self):
         """
-        Obtener perfil del usuario autenticado
-        GET /api/v1/auth/profile
+        POST /api/auth/logout
+        Logout de usuario (requiere autenticación)
         """
         try:
-            user_id = req.user['id']
+            # Usuario viene del middleware de autenticación
+            user = g.user
+            token = g.token
             
-            result = auth_service.get_profile(user_id)
+            audit_context = {
+                'ip': request.remote_addr,
+                'user_agent': request.headers.get('User-Agent')
+            }
             
-            if not result['success']:
-                return error_response(result['message'], 404)
+            result = auth_service.logout(user['id'], token, audit_context)
             
-            return success_response(
-                result['data'],
-                'Perfil obtenido exitosamente',
-                200
-            )
+            return ApiResponse.success('Logout exitoso', result)
             
-        except Exception as error:
-            logger.error(f'Error en getProfile controller: {str(error)}')
-            return error_response(str(error), 500)
+        except AppError as e:
+            return ApiResponse.error(e.message, e.code, e.details, e.status_code)
+        except Exception as e:
+            return ApiResponse.internal_error(str(e))
     
-    
-    def update_profile(self, req):
+    def refresh_token(self):
         """
-        Actualizar perfil del usuario autenticado
-        PUT /api/v1/auth/profile
-        """
-        try:
-            user_id = req.user['id']
-            data = req.get_json()
-            
-            result = auth_service.update_profile(user_id, {
-                'name': data.get('name'),
-                'email': data.get('email')
-            })
-            
-            if not result['success']:
-                return error_response(result['message'], 400)
-            
-            return success_response(
-                result['data'],
-                'Perfil actualizado exitosamente',
-                200
-            )
-            
-        except Exception as error:
-            logger.error(f'Error en updateProfile controller: {str(error)}')
-            return error_response(str(error), 500)
-    
-    
-    def change_password(self, req):
-        """
-        Cambiar contraseña del usuario autenticado
-        PUT /api/v1/auth/change-password
+        POST /api/auth/refresh
+        Refresca el access token
         """
         try:
-            user_id = req.user['id']
-            data = req.get_json()
+            data = request.get_json()
+            dto = RefreshTokenDTO.from_request(data)
             
-            result = auth_service.change_password(
-                user_id,
-                data.get('currentPassword'),
-                data.get('newPassword')
+            audit_context = {
+                'ip': request.remote_addr,
+                'user_agent': request.headers.get('User-Agent')
+            }
+            
+            result = auth_service.refresh_token(dto, audit_context)
+            
+            return ApiResponse.success(
+                'Token refrescado exitosamente',
+                result.to_dict()
             )
             
-            if not result['success']:
-                return error_response(result['message'], 400)
-            
-            return success_response(
-                result['data'],
-                'Contraseña actualizada exitosamente',
-                200
-            )
-            
-        except Exception as error:
-            logger.error(f'Error en changePassword controller: {str(error)}')
-            return error_response(str(error), 500)
+        except AppError as e:
+            return ApiResponse.error(e.message, e.code, e.details, e.status_code)
+        except Exception as e:
+            return ApiResponse.internal_error(str(e))
     
-    
-    def deactivate_account(self, req):
+    def me(self):
         """
-        Desactivar cuenta del usuario autenticado
-        DELETE /api/v1/auth/account
+        GET /api/auth/me
+        Obtiene el usuario actual (requiere autenticación)
         """
         try:
-            user_id = req.user['id']
+            user = g.user
+            return ApiResponse.success('Usuario obtenido', user)
             
-            result = auth_service.deactivate_user(user_id)
+        except Exception as e:
+            return ApiResponse.internal_error(str(e))
+    
+    def verify_token(self):
+        """
+        GET /api/auth/verify
+        Verifica si un token es válido
+        """
+        try:
+            # Obtener token del header
+            auth_header = request.headers.get('Authorization', '')
+            token = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else ''
             
-            if not result['success']:
-                return error_response(result['message'], 400)
+            if not token:
+                return ApiResponse.success('Token verification', {'valid': False, 'reason': 'No token provided'})
             
-            return success_response(
-                result['data'],
-                'Cuenta desactivada exitosamente',
-                200
-            )
+            result = auth_service.verify_token(token)
             
-        except Exception as error:
-            logger.error(f'Error en deactivateAccount controller: {str(error)}')
-            return error_response(str(error), 500)
+            return ApiResponse.success('Token verification', result)
+            
+        except Exception as e:
+            return ApiResponse.internal_error(str(e))
+
+
+# Singleton instance
+auth_controller = AuthController()

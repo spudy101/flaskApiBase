@@ -1,244 +1,128 @@
 """
-Controller de productos
-Equivalente a productController.js
+Product Controller
+Equivalente a src/controllers/product.controller.js
 """
-
-from src.services import product_service
-from src.utils import success_response, error_response, paginated_response, logger
+from flask import request, g
+from src.repositories.product_repository import product_repository
+from src.dto.product_dto import CreateProductDTO, UpdateProductDTO, ProductResponseDTO
+from src.utils.response_util import ApiResponse
+from src.utils.app_error import AppError
 
 
 class ProductController:
-    """Controller de productos"""
+    """Product controller"""
     
-    def create_product(self, req):
-        """
-        Crear producto
-        POST /api/v1/products
-        """
+    def get_all(self):
+        """GET /api/products - Obtiene todos los productos"""
         try:
-            user_id = req.user['id']
-            product_data = req.get_json()
+            page = int(request.args.get('page', 1))
+            limit = int(request.args.get('limit', 10))
+            category = request.args.get('category')
             
-            result = product_service.create_product(product_data, user_id)
+            # Filtros
+            filters = {'is_active': True}
+            if category:
+                filters['category'] = category
             
-            if not result['success']:
-                return error_response(result['message'], 400)
+            result = product_repository.find_with_pagination(page=page, limit=limit, **filters)
             
-            return success_response(
-                result['data'],
-                'Producto creado exitosamente',
-                201
-            )
+            products_dto = [ProductResponseDTO.from_model(p).to_dict() for p in result['rows']]
             
-        except Exception as error:
-            logger.error(f'Error en createProduct controller: {str(error)}')
-            return error_response(str(error), 500)
-    
-    
-    def list_products(self, req):
-        """
-        Listar productos con filtros y paginación
-        GET /api/v1/products
-        """
-        try:
-            filters = {
-                'page': req.args.get('page'),
-                'limit': req.args.get('limit'),
-                'category': req.args.get('category'),
-                'isActive': req.args.get('isActive'),
-                'minPrice': req.args.get('minPrice'),
-                'maxPrice': req.args.get('maxPrice'),
-                'search': req.args.get('search'),
-                'sortBy': req.args.get('sortBy'),
-                'sortOrder': req.args.get('sortOrder')
+            response_data = {
+                'products': products_dto,
+                'pagination': {
+                    'page': result['page'],
+                    'limit': result['limit'],
+                    'total': result['count'],
+                    'total_pages': result['total_pages']
+                }
             }
             
-            result = product_service.list_products(filters)
+            return ApiResponse.success('Productos obtenidos', response_data)
             
-            if not result['success']:
-                return error_response(result['message'], 400)
-            
-            return paginated_response(
-                result['data']['products'],
-                result['data']['pagination']['page'],
-                result['data']['pagination']['limit'],
-                result['data']['pagination']['total'],
-                'Productos obtenidos exitosamente'
-            )
-            
-        except Exception as error:
-            logger.error(f'Error en listProducts controller: {str(error)}')
-            return error_response(str(error), 500)
+        except Exception as e:
+            return ApiResponse.internal_error(str(e))
     
-    
-    def get_product_by_id(self, req, product_id):
-        """
-        Obtener producto por ID
-        GET /api/v1/products/:id
-        """
+    def get_by_id(self, product_id: str):
+        """GET /api/products/:id"""
         try:
-            result = product_service.get_product_by_id(product_id)
+            product = product_repository.find_by_id(product_id)
             
-            if not result['success']:
-                return error_response(result['message'], 404)
+            if not product:
+                return ApiResponse.not_found('Producto no encontrado')
             
-            return success_response(
-                result['data'],
-                'Producto obtenido exitosamente',
-                200
-            )
+            product_dto = ProductResponseDTO.from_model(product, include_creator=True).to_dict()
             
-        except Exception as error:
-            logger.error(f'Error en getProductById controller: {str(error)}')
+            return ApiResponse.success('Producto obtenido', product_dto)
             
-            if str(error) == 'Producto no encontrado':
-                return error_response(str(error), 404)
-            
-            return error_response(str(error), 500)
+        except Exception as e:
+            return ApiResponse.internal_error(str(e))
     
-    
-    def update_product(self, req, product_id):
-        """
-        Actualizar producto
-        PUT /api/v1/products/:id
-        """
+    def create(self):
+        """POST /api/products - Crea un producto"""
         try:
-            user_id = req.user['id']
-            update_data = req.get_json()
+            data = request.get_json()
+            user = g.user
             
-            result = product_service.update_product(product_id, update_data, user_id)
+            dto = CreateProductDTO.from_request(data, user['id'])
             
-            if not result['success']:
-                return error_response(result['message'], 400)
+            product = product_repository.create(dto.to_dict())
+            product_dto = ProductResponseDTO.from_model(product).to_dict()
             
-            return success_response(
-                result['data'],
-                'Producto actualizado exitosamente',
-                200
-            )
+            return ApiResponse.created('Producto creado', product_dto)
             
-        except Exception as error:
-            logger.error(f'Error en updateProduct controller: {str(error)}')
-            return error_response(str(error), 500)
+        except AppError as e:
+            return ApiResponse.error(e.message, e.code, e.details, e.status_code)
+        except Exception as e:
+            return ApiResponse.internal_error(str(e))
     
-    
-    def update_stock(self, req, product_id):
-        """
-        Actualizar stock del producto
-        PATCH /api/v1/products/:id/stock
-        """
+    def update(self, product_id: str):
+        """PUT /api/products/:id"""
         try:
-            data = req.get_json()
-            quantity = data.get('quantity')
-            operation = data.get('operation')
+            user = g.user
+            product = product_repository.find_by_id(product_id)
             
-            result = product_service.update_stock(product_id, quantity, operation)
+            if not product:
+                return ApiResponse.not_found('Producto no encontrado')
             
-            if not result['success']:
-                return error_response(
-                    result['message'], 
-                    400, 
-                    result.get('data')
-                )
+            # Solo el creador o admin puede actualizar
+            if product.created_by != user['id'] and user['role'] != 'admin':
+                return ApiResponse.forbidden('No tienes permisos para actualizar este producto')
             
-            return success_response(
-                result['data'],
-                'Stock actualizado exitosamente',
-                200
-            )
+            data = request.get_json()
+            dto = UpdateProductDTO.from_request(data)
             
-        except Exception as error:
-            logger.error(f'Error en updateStock controller: {str(error)}')
-            return error_response(str(error), 500)
+            updated_product = product_repository.update(product_id, dto.to_dict())
+            product_dto = ProductResponseDTO.from_model(updated_product).to_dict()
+            
+            return ApiResponse.success('Producto actualizado', product_dto)
+            
+        except AppError as e:
+            return ApiResponse.error(e.message, e.code, e.details, e.status_code)
+        except Exception as e:
+            return ApiResponse.internal_error(str(e))
     
-    
-    def delete_product(self, req, product_id):
-        """
-        Eliminar producto (soft delete)
-        DELETE /api/v1/products/:id
-        """
+    def delete(self, product_id: str):
+        """DELETE /api/products/:id"""
         try:
-            result = product_service.delete_product(product_id)
+            user = g.user
+            product = product_repository.find_by_id(product_id)
             
-            if not result['success']:
-                return error_response(result['message'], 400)
+            if not product:
+                return ApiResponse.not_found('Producto no encontrado')
             
-            return success_response(
-                result['data'],
-                'Producto eliminado exitosamente',
-                200
-            )
+            # Solo el creador o admin puede eliminar
+            if product.created_by != user['id'] and user['role'] != 'admin':
+                return ApiResponse.forbidden('No tienes permisos para eliminar este producto')
             
-        except Exception as error:
-            logger.error(f'Error en deleteProduct controller: {str(error)}')
-            return error_response(str(error), 500)
-    
-    
-    def permanently_delete_product(self, req, product_id):
-        """
-        Eliminar producto permanentemente (Admin)
-        DELETE /api/v1/products/:id/permanent
-        """
-        try:
-            result = product_service.permanently_delete_product(product_id)
+            # Soft delete
+            product_repository.soft_delete(product_id)
             
-            if not result['success']:
-                return error_response(result['message'], 400)
+            return ApiResponse.success('Producto eliminado')
             
-            return success_response(
-                result['data'],
-                'Producto eliminado permanentemente',
-                200
-            )
-            
-        except Exception as error:
-            logger.error(f'Error en permanentlyDeleteProduct controller: {str(error)}')
-            return error_response(str(error), 500)
-    
-    
-    def get_products_by_category(self, req, category):
-        """
-        Obtener productos por categoría
-        GET /api/v1/products/category/:category
-        """
-        try:
-            result = product_service.get_products_by_category(category)
-            
-            if not result['success']:
-                return error_response(result['message'], 400)
-            
-            return success_response(
-                result['data'],
-                'Productos obtenidos exitosamente',
-                200
-            )
-            
-        except Exception as error:
-            logger.error(f'Error en getProductsByCategory controller: {str(error)}')
-            return error_response(str(error), 500)
-    
-    
-    def get_product_stats(self, req):
-        """
-        Obtener estadísticas de productos (Admin)
-        GET /api/v1/products/stats
-        """
-        try:
-            result = product_service.get_product_stats()
-            
-            if not result['success']:
-                return error_response(result['message'], 400)
-            
-            return success_response(
-                result['data'],
-                'Estadísticas obtenidas exitosamente',
-                200
-            )
-            
-        except Exception as error:
-            logger.error(f'Error en getProductStats controller: {str(error)}')
-            return error_response(str(error), 500)
+        except Exception as e:
+            return ApiResponse.internal_error(str(e))
 
 
-# Exportar instancia única
+# Singleton instance
 product_controller = ProductController()

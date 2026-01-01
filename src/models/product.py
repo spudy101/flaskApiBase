@@ -1,71 +1,72 @@
-import os
-from config.database import db
-from src.models.base import BaseModel
-from sqlalchemy.orm import validates
-from decimal import Decimal
+"""
+Product model - SQLAlchemy
+Equivalente a src/models/Product.js
+"""
+from datetime import datetime
+from sqlalchemy import Column, String, Text, Numeric, Integer, Boolean, DateTime, ForeignKey, CheckConstraint
+from sqlalchemy.orm import relationship
+import uuid
 
-DB_SCHEMA = os.getenv('DB_SCHEMA')
 
-class Product(BaseModel):
-    """
-    Modelo de Producto
-    Equivalente a Product.js de Sequelize
-    """
-    __tablename__ = 'products'
-    __table_args__ = {'schema': DB_SCHEMA}
+class Product:
+    """Product model definition"""
     
-    name = db.Column(db.String(200), nullable=False)
-    description = db.Column(db.Text, nullable=True)
-    price = db.Column(db.Numeric(10, 2), nullable=False)
-    stock = db.Column(db.Integer, nullable=False, default=0)
-    category = db.Column(db.String(100), nullable=True)
-    is_active = db.Column(db.Boolean, default=True, nullable=False)
-    
-    # Foreign Key
-    created_by = db.Column(
-        db.String(36),
-        db.ForeignKey(f'{DB_SCHEMA}.users.id', ondelete='CASCADE'),
-        nullable=False
-    )
-    
-    # Relación (belongsTo User)
-    creator = db.relationship('User', back_populates='products')
-    
-    # Validaciones
-    @validates('name')
-    def validate_name(self, key, name):
-        """Valida nombre del producto"""
-        if not name or len(name.strip()) == 0:
-            raise ValueError('El nombre es requerido')
+    @staticmethod
+    def define_model(db):
+        """Define Product model with SQLAlchemy"""
         
-        if len(name) < 3 or len(name) > 200:
-            raise ValueError('El nombre debe tener entre 3 y 200 caracteres')
+        class ProductModel(db.Model):
+            __tablename__ = 'products'
+            
+            # Columns
+            id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+            name = Column(String(200), nullable=False)
+            description = Column(Text, nullable=True)
+            price = Column(Numeric(10, 2), nullable=False)
+            stock = Column(Integer, default=0, nullable=False)
+            category = Column(String(100), nullable=True)
+            is_active = Column(Boolean, default=True, nullable=False)
+            created_by = Column(String(36), ForeignKey('users.id'), nullable=False)
+            created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+            updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+            
+            # Relationships
+            creator = relationship('User', back_populates='products')
+            
+            # Constraints
+            __table_args__ = (
+                CheckConstraint('price >= 0', name='check_price_positive'),
+                CheckConstraint('stock >= 0', name='check_stock_positive'),
+            )
+            
+            def to_dict(self, include_creator: bool = False) -> dict:
+                """
+                Convierte el modelo a diccionario
+                Equivalente a toJSON() en Sequelize
+                """
+                data = {
+                    'id': self.id,
+                    'name': self.name,
+                    'description': self.description,
+                    'price': float(self.price) if self.price else 0.0,
+                    'stock': self.stock,
+                    'category': self.category,
+                    'is_active': self.is_active,
+                    'created_by': self.created_by,
+                    'created_at': self.created_at.isoformat() if self.created_at else None,
+                    'updated_at': self.updated_at.isoformat() if self.updated_at else None
+                }
+                
+                if include_creator and self.creator:
+                    data['creator'] = {
+                        'id': self.creator.id,
+                        'name': self.creator.name,
+                        'email': self.creator.email
+                    }
+                    
+                return data
+            
+            def __repr__(self):
+                return f'<Product {self.name}>'
         
-        return name.strip()
-    
-    @validates('price')
-    def validate_price(self, key, price):
-        """Valida precio"""
-        if price is None:
-            raise ValueError('El precio es requerido')
-        
-        price_decimal = Decimal(str(price))
-        
-        if price_decimal < 0:
-            raise ValueError('El precio debe ser mayor o igual a 0')
-        
-        return price_decimal
-    
-    @validates('stock')
-    def validate_stock(self, key, stock):
-        """Valida stock"""
-        if stock is None:
-            raise ValueError('El stock es requerido')
-        
-        if not isinstance(stock, int):
-            raise ValueError('El stock debe ser un número entero')
-        
-        if stock < 0:
-            raise ValueError('El stock debe ser mayor o igual a 0')
-        
-        return stock
+        return ProductModel

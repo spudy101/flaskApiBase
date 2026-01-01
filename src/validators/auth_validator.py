@@ -1,261 +1,121 @@
-from marshmallow import Schema, fields, validate, validates, validates_schema, ValidationError
-import re
-from sqlalchemy import select
-from src.models import User
+"""
+Auth Validators - Request validation
+Equivalente a src/validators/auth.validator.js
+"""
+from functools import wraps
+from flask import request
+from marshmallow import Schema, fields, validate, ValidationError
+from src.utils.response_util import ApiResponse
 
+
+# ========================================
+# Schemas
+# ========================================
 
 class RegisterSchema(Schema):
-    """Schema para validación de registro de usuario"""
-    
-    email = fields.Email(
+    """Schema para validación de registro"""
+    email = fields.Email(required=True, error_messages={'required': 'Email es requerido'})
+    password = fields.Str(
         required=True,
-        error_messages={
-            'required': 'El email es requerido',
-            'invalid': 'Debe ser un email válido'
-        }
+        validate=[
+            validate.Length(min=8, max=100, error='Password debe tener entre 8 y 100 caracteres'),
+            validate.Regexp(
+                r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])',
+                error='Password debe contener al menos: 1 mayúscula, 1 minúscula, 1 número y 1 carácter especial'
+            )
+        ],
+        error_messages={'required': 'Password es requerido'}
     )
-    
-    password = fields.String(
+    name = fields.Str(
         required=True,
-        validate=validate.Length(min=6, error='La contraseña debe tener al menos 6 caracteres'),
-        error_messages={
-            'required': 'La contraseña es requerida'
-        }
+        validate=[
+            validate.Length(min=2, max=100, error='Nombre debe tener entre 2 y 100 caracteres'),
+            validate.Regexp(
+                r'^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$',
+                error='Nombre solo puede contener letras y espacios'
+            )
+        ],
+        error_messages={'required': 'Nombre es requerido'}
     )
-    
-    name = fields.String(
-        required=True,
-        validate=validate.Length(min=2, max=100, error='El nombre debe tener entre 2 y 100 caracteres'),
-        error_messages={
-            'required': 'El nombre es requerido'
-        }
+    role = fields.Str(
+        validate=validate.OneOf(['user', 'admin'], error='Rol debe ser "user" o "admin"'),
+        load_default='user'
     )
-    
-    role = fields.String(
-        load_default='user',
-        validate=validate.OneOf(['user', 'admin'], error='El rol debe ser user o admin')
-    )
-    
-    @validates('password')
-    def validate_password(self, value):
-        """Validar que la contraseña tenga mayúscula, minúscula y número"""
-        if not re.search(r'[a-z]', value):
-            raise ValidationError('La contraseña debe contener al menos una minúscula')
-        if not re.search(r'[A-Z]', value):
-            raise ValidationError('La contraseña debe contener al menos una mayúscula')
-        if not re.search(r'\d', value):
-            raise ValidationError('La contraseña debe contener al menos un número')
-    
-    @validates('name')
-    def validate_name(self, value):
-        """Validar que el nombre solo contenga letras y espacios"""
-        pattern = r'^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$'
-        if not re.match(pattern, value):
-            raise ValidationError('El nombre solo puede contener letras y espacios')
-    
-    @validates('email')
-    def validate_email_unique(self, value):
-        """Validar que el email no esté registrado"""
-        from config.database import SessionLocal
-        
-        db = SessionLocal()
-        try:
-            stmt = select(User).where(User.email == value.lower())
-            existing_user = db.execute(stmt).scalar_one_or_none()
-            
-            if existing_user:
-                raise ValidationError('El email ya está registrado')
-        finally:
-            db.close()
 
 
 class LoginSchema(Schema):
     """Schema para validación de login"""
-    
-    email = fields.Email(
-        required=True,
-        error_messages={
-            'required': 'El email es requerido',
-            'invalid': 'Debe ser un email válido'
-        }
-    )
-    
-    password = fields.String(
-        required=True,
-        error_messages={
-            'required': 'La contraseña es requerida'
-        }
-    )
+    email = fields.Email(required=True, error_messages={'required': 'Email es requerido'})
+    password = fields.Str(required=True, error_messages={'required': 'Password es requerido'})
 
 
-class UpdateProfileSchema(Schema):
-    """Schema para validación de actualización de perfil"""
-    
-    name = fields.String(
-        validate=validate.Length(min=2, max=100, error='El nombre debe tener entre 2 y 100 caracteres'),
-        allow_none=True
-    )
-    
-    email = fields.Email(
-        error_messages={
-            'invalid': 'Debe ser un email válido'
-        },
-        allow_none=True
-    )
-    
-    def __init__(self, current_user_id=None, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.current_user_id = current_user_id
-    
-    @validates('name')
-    def validate_name(self, value):
-        """Validar que el nombre solo contenga letras y espacios"""
-        if value:
-            pattern = r'^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$'
-            if not re.match(pattern, value):
-                raise ValidationError('El nombre solo puede contener letras y espacios')
-    
-    @validates('email')
-    def validate_email_unique(self, value):
-        """Validar que el email no esté en uso por otro usuario"""
-        if not value or not self.current_user_id:
-            return
-        
-        from config.database import SessionLocal
-        
-        db = SessionLocal()
-        try:
-            stmt = select(User).where(User.email == value.lower())
-            existing_user = db.execute(stmt).scalar_one_or_none()
-            
-            if existing_user and str(existing_user.id) != str(self.current_user_id):
-                raise ValidationError('El email ya está en uso por otro usuario')
-        finally:
-            db.close()
+class RefreshTokenSchema(Schema):
+    """Schema para validación de refresh token"""
+    refresh_token = fields.Str(required=True, error_messages={'required': 'Refresh token es requerido'})
+    # También aceptar refreshToken (camelCase de Node.js)
+    refreshToken = fields.Str(load_default=None)
 
 
-class ChangePasswordSchema(Schema):
-    """Schema para validación de cambio de contraseña"""
-    
-    currentPassword = fields.String(
-        required=True,
-        error_messages={
-            'required': 'La contraseña actual es requerida'
-        }
-    )
-    
-    newPassword = fields.String(
-        required=True,
-        validate=validate.Length(min=6, error='La nueva contraseña debe tener al menos 6 caracteres'),
-        error_messages={
-            'required': 'La nueva contraseña es requerida'
-        }
-    )
-    
-    confirmPassword = fields.String(
-        required=True,
-        error_messages={
-            'required': 'Debes confirmar la nueva contraseña'
-        }
-    )
-    
-    @validates('newPassword')
-    def validate_new_password(self, value):
-        """Validar que la nueva contraseña tenga mayúscula, minúscula y número"""
-        if not re.search(r'[a-z]', value):
-            raise ValidationError('La nueva contraseña debe contener al menos una minúscula')
-        if not re.search(r'[A-Z]', value):
-            raise ValidationError('La nueva contraseña debe contener al menos una mayúscula')
-        if not re.search(r'\d', value):
-            raise ValidationError('La nueva contraseña debe contener al menos un número')
-    
-    @validates_schema
-    def validate_passwords(self, data, **kwargs):
-        """Validar que las contraseñas coincidan y sean diferentes"""
-        current = data.get('currentPassword')
-        new = data.get('newPassword')
-        confirm = data.get('confirmPassword')
-        
-        # Validar que la nueva contraseña sea diferente
-        if current and new and current == new:
-            raise ValidationError(
-                'La nueva contraseña debe ser diferente a la actual',
-                field_name='newPassword'
-            )
-        
-        # Validar que las contraseñas coincidan
-        if new and confirm and new != confirm:
-            raise ValidationError(
-                'Las contraseñas no coinciden',
-                field_name='confirmPassword'
-            )
+# ========================================
+# Decorators de validación
+# ========================================
 
-
-# Funciones helper para usar en los controllers
-def validate_register(data):
+def validate_schema(schema_class):
     """
-    Valida datos de registro
-    
-    Args:
-        data: Dict con datos de registro
-        
-    Returns:
-        Dict con datos validados
-        
-    Raises:
-        ValidationError si hay errores
+    Decorator genérico para validar request con marshmallow schema
+    Equivalente a express-validator en Node.js
     """
-    schema = RegisterSchema()
-    return schema.load(data)
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            try:
+                # Obtener datos del request
+                data = request.get_json()
+                
+                if not data:
+                    return ApiResponse.bad_request('Request body es requerido')
+                
+                # Validar con schema
+                schema = schema_class()
+                validated_data = schema.load(data)
+                
+                # Agregar datos validados al request
+                request.validated_data = validated_data
+                
+                return f(*args, **kwargs)
+                
+            except ValidationError as err:
+                # Formatear errores de validación
+                errors = []
+                for field, messages in err.messages.items():
+                    if isinstance(messages, list):
+                        for msg in messages:
+                            errors.append({
+                                'field': field,
+                                'message': msg
+                            })
+                    else:
+                        errors.append({
+                            'field': field,
+                            'message': messages
+                        })
+                
+                return ApiResponse.validation_error('Errores de validación', errors)
+        
+        return decorated_function
+    return decorator
 
 
-def validate_login(data):
-    """
-    Valida datos de login
-    
-    Args:
-        data: Dict con datos de login
-        
-    Returns:
-        Dict con datos validados
-        
-    Raises:
-        ValidationError si hay errores
-    """
-    schema = LoginSchema()
-    return schema.load(data)
+def validate_register():
+    """Validator para register endpoint"""
+    return validate_schema(RegisterSchema)
 
 
-def validate_update_profile(data, current_user_id):
-    """
-    Valida datos de actualización de perfil
-    
-    Args:
-        data: Dict con datos a actualizar
-        current_user_id: ID del usuario actual
-        
-    Returns:
-        Dict con datos validados
-        
-    Raises:
-        ValidationError si hay errores
-    """
-    schema = UpdateProfileSchema(current_user_id=current_user_id)
-    return schema.load(data)
+def validate_login():
+    """Validator para login endpoint"""
+    return validate_schema(LoginSchema)
 
 
-def validate_change_password(data):
-    """
-    Valida datos de cambio de contraseña
-    
-    Args:
-        data: Dict con contraseñas
-        
-    Returns:
-        Dict con datos validados
-        
-    Raises:
-        ValidationError si hay errores
-    """
-    schema = ChangePasswordSchema()
-    return schema.load(data)
+def validate_refresh_token():
+    """Validator para refresh token endpoint"""
+    return validate_schema(RefreshTokenSchema)
